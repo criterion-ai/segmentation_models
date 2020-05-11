@@ -3,6 +3,8 @@ from keras_applications import get_submodules_from_kwargs
 from ._common_blocks import Conv2dBn
 from ._utils import freeze_model, filter_keras_submodules
 from ..backbones.backbones_factory import Backbones
+import logging
+log = logging.getLogger(__name__)
 
 backend = None
 layers = None
@@ -171,6 +173,7 @@ def Unet(
         decoder_block_type='upsampling',
         decoder_filters=(256, 128, 64, 32, 16),
         decoder_use_batchnorm=True,
+        backbone=None,
         **kwargs
 ):
     """ Unet_ is a fully convolution neural network for image semantic segmentation
@@ -219,7 +222,7 @@ def Unet(
         raise ValueError('Decoder block type should be in ("upsampling", "transpose"). '
                          'Got: {}'.format(decoder_block_type))
 
-    backbone = Backbones.get_backbone(
+    backbone = backbone or Backbones.get_backbone(
         backbone_name,
         input_shape=input_shape,
         weights=encoder_weights,
@@ -229,6 +232,12 @@ def Unet(
 
     if encoder_features == 'default':
         encoder_features = Backbones.get_feature_layers(backbone_name, n=4)
+    ef = encoder_features
+    encoder_features = [ll for ll in encoder_features if ll in [ll.name for ll in backbone.layers]]
+    decoder_filters = decoder_filters[-len(encoder_features)-1:]
+    diff = set(ef).difference(set(encoder_features))
+    if diff:
+        log.warning(f"UNet model: the following encoder_features are not in backbone {', '.join(diff)} \nFound and using: {', '.join(encoder_features)}")
 
     model = build_unet(
         backbone=backbone,
